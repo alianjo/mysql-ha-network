@@ -74,3 +74,26 @@
   community.mysql.mysql_replication:
     mode: startreplica
     login_unix_socket: /run/mysqld/mysqld.sock
+
+- name: Wait for MySQL replication to become healthy
+  community.mysql.mysql_query:
+    login_unix_socket: /run/mysqld/mysqld.sock
+    query: >-
+      SELECT IF(
+        EXISTS (
+          SELECT 1
+          FROM performance_schema.replication_connection_status
+          WHERE SERVICE_STATE = 'ON'
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM performance_schema.replication_applier_status
+          WHERE SERVICE_STATE = 'ON'
+        ),
+        'HEALTHY',
+        'UNHEALTHY'
+      ) AS replica_health
+  register: mysql_replica_health
+  until: mysql_replica_health.query_result[0][0].replica_health == 'HEALTHY'
+  retries: 30
+  delay: 2

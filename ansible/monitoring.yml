@@ -9,8 +9,17 @@
     - node_exporter
     - logging
 
-- name: Install MySQL replication metrics agents
-  hosts: mysql
+- name: Install MySQL replication metrics agent on the primary
+  hosts: mysql_primary
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../inventory/group_vars/vault.yml
+  roles:
+    - mysql_exporter
+
+- name: Install MySQL replication metrics agent on the replica
+  hosts: mysql_replica
   become: true
   gather_facts: true
   vars_files:

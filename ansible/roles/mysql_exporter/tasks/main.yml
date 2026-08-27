@@ -30,6 +30,33 @@
     host: localhost
     state: present
   no_log: true
+  when: inventory_hostname in groups['mysql_primary']
+
+- name: Wait for metrics user to replicate to the replica
+  community.mysql.mysql_query:
+    login_unix_socket: /run/mysqld/mysqld.sock
+    query: >-
+      SELECT COUNT(*) AS user_count
+      FROM mysql.user
+      WHERE User = %(metrics_user)s AND Host = 'localhost'
+    named_args:
+      metrics_user: "{{ mysql_metrics_user }}"
+  register: mysql_metrics_user_status
+  until: mysql_metrics_user_status.query_result[0][0].user_count | int > 0
+  retries: 30
+  delay: 2
+  when: inventory_hostname in groups['mysql_replica']
+
+- name: Ensure least-privilege metrics user exists on the replica
+  community.mysql.mysql_user:
+    name: "{{ mysql_metrics_user }}"
+    password: "{{ mysql_metrics_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+    priv: "*.*:PROCESS,REPLICATION CLIENT,SELECT"
+    host: localhost
+    state: present
+  no_log: true
+  when: inventory_hostname in groups['mysql_replica']
 
 - name: Install MySQL metrics client credentials
   ansible.builtin.template:

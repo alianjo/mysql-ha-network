@@ -3,6 +3,7 @@
   hosts: routing:mysql:monitoring
   become: true
   gather_facts: true
+  serial: 1
   vars_files:
     - ../inventory/group_vars/vault.yml
   roles:

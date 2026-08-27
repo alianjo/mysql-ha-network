@@ -33,6 +33,16 @@
 - name: Apply MySQL configuration before replication setup
   ansible.builtin.meta: flush_handlers
 
+- name: Ensure replication account exists on replica
+  community.mysql.mysql_user:
+    name: "{{ mysql_replication_user }}"
+    password: "{{ mysql_replication_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+    priv: "*.*:REPLICATION SLAVE"
+    host: '%'
+    state: present
+  no_log: true
+
 - name: Stop replica before changing source
   community.mysql.mysql_replication:
     mode: stopreplica

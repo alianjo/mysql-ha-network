@@ -1,0 +1,17 @@
+---
+frr_packages:
+  - frr
+  - frr-pythontools
+frr_config_path: /etc/frr/frr.conf
+frr_daemons_path: /etc/frr/daemons
+frr_bfd_profile_name: SRE_OSPF
+frr_log_level: informational
+frr_loopback_service_name: sre-mysql-loopback
+frr_manage_service: true
+
+frr_router_ids: {}
+
+frr_local_links: >-
+  {{ wireguard_links
+     | selectattr('local_host', 'equalto', inventory_hostname)
+     | list }}

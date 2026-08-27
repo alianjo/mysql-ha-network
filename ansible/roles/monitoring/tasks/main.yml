@@ -1,0 +1,50 @@
+---
+- name: Install Docker runtime
+  ansible.builtin.apt:
+    name: [docker.io, docker-compose-v2]
+    state: present
+    update_cache: true
+
+- name: Enable Docker
+  ansible.builtin.service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Create monitoring directories
+  ansible.builtin.file:
+    path: "{{ monitoring_dir }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop: [prometheus, alertmanager, blackbox, grafana/provisioning/datasources, grafana/provisioning/dashboards, grafana/dashboards, loki]
+
+- name: Install monitoring configuration
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ monitoring_dir }}/{{ item.dest }}"
+    mode: '0644'
+  loop:
+    - {src: docker-compose.yml.j2, dest: docker-compose.yml}
+    - {src: prometheus.yml.j2, dest: prometheus/prometheus.yml}
+    - {src: alerts.yml.j2, dest: prometheus/alerts.yml}
+    - {src: alertmanager.yml.j2, dest: alertmanager/alertmanager.yml}
+    - {src: blackbox.yml.j2, dest: blackbox/blackbox.yml}
+    - {src: loki.yml.j2, dest: loki/loki.yml}
+    - {src: datasource.yml.j2, dest: grafana/provisioning/datasources/datasource.yml}
+    - {src: dashboard-provider.yml.j2, dest: grafana/provisioning/dashboards/provider.yml}
+    - {src: overview.json.j2, dest: grafana/dashboards/overview.json}
+  register: monitoring_configuration
+  no_log: true
+
+- name: Start observability stack
+  ansible.builtin.command:
+    cmd: docker compose --compatibility up -d
+    chdir: "{{ monitoring_dir }}"
+  changed_when: true
+
+- name: Recreate observability services when their mounted configuration changes
+  ansible.builtin.command:
+    cmd: docker compose --compatibility up -d --force-recreate
+    chdir: "{{ monitoring_dir }}"
+  when: monitoring_configuration.changed
+  changed_when: true

@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh SRE network and routing metrics
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=15s
+Unit=sre-network-metrics.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,42 @@
+! Managed by Ansible. Do not edit by hand.
+frr defaults traditional
+hostname {{ inventory_hostname }}
+service integrated-vtysh-config
+log syslog {{ frr_log_level }}
+!
+bfd
+ profile {{ frr_bfd_profile_name }}
+  detect-multiplier {{ bfd_multiplier }}
+  receive-interval {{ bfd_receive_interval_ms }}
+  transmit-interval {{ bfd_transmit_interval_ms }}
+ !
+!
+{% for link in frr_local_links | sort(attribute='name') %}
+interface {{ link.name }}
+ description {{ link.path | upper }} to {{ link.peer_host }}
+ ip ospf area {{ ospf_area }}
+ ip ospf network point-to-point
+ ip ospf cost {{ link.ospf_cost }}
+ ip ospf hello-interval {{ ospf_hello_interval_seconds }}
+ ip ospf dead-interval {{ ospf_dead_interval_seconds }}
+ ip ospf bfd
+ ip ospf bfd profile {{ frr_bfd_profile_name }}
+!
+{% endfor %}
+{% if mysql_loopbacks[inventory_hostname] is defined %}
+interface lo
+ ip ospf area {{ ospf_area }}
+!
+{% endif %}
+router ospf
+ ospf router-id {{ frr_router_ids[inventory_hostname] }}
+ passive-interface default
+{% for link in frr_local_links | sort(attribute='name') %}
+ no passive-interface {{ link.name }}
+{% endfor %}
+{% if mysql_loopbacks[inventory_hostname] is defined %}
+ network {{ mysql_loopbacks[inventory_hostname] }} area {{ ospf_area }}
+{% endif %}
+!
+line vty
+!

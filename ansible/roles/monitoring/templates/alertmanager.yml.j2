@@ -1,0 +1,17 @@
+global:
+  smtp_from: "{{ vault_alert_email }}"
+route:
+  receiver: default
+  group_by: [alertname, host, site]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+receivers:
+  - name: default
+    # Replace with SMTP, Slack, PagerDuty, or webhook settings in Vault.
+    email_configs:
+      - to: "{{ vault_alert_email }}"
+        send_resolved: true
+        smarthost: "{{ vault_smtp_smarthost }}"
+        auth_username: "{{ vault_smtp_username }}"
+        auth_password: "{{ vault_smtp_password }}"

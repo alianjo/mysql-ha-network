@@ -1,0 +1,7 @@
+---
+monitoring_dir: /opt/sre-observability
+prometheus_image: prom/prometheus:v2.54.1
+grafana_image: grafana/grafana:11.2.0
+alertmanager_image: prom/alertmanager:v0.27.0
+blackbox_image: prom/blackbox-exporter:v0.25.0
+loki_image: grafana/loki:3.1.1

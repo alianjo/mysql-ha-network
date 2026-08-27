@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -u
+out={{ node_exporter_textfile_dir }}/sre_network.prom
+tmp="${out}.tmp"
+state_dir={{ common_state_dir | default('/var/lib/mysql-ha-network') }}
+mkdir -p "$state_dir"
+
+log_event() {
+  logger -p daemon.notice -t sre-ha-event -- "$1"
+}
+
+record_route_state() {
+  local destination="$1"
+  local present="$2"
+  local interface="$3"
+  local state_file="$state_dir/network-route-${destination//./_}.state"
+  local previous_present=""
+  local previous_interface=""
+
+  if [ -s "$state_file" ]; then
+    IFS=' ' read -r previous_present previous_interface < "$state_file" || true
+  fi
+
+  if [ -n "$previous_present" ] && [ "$previous_present" != "$present" ]; then
+    if [ "$present" -eq 0 ]; then
+      log_event "event=NETWORK_FAILURE host=$(hostname) destination=$destination reason=route_missing"
+    else
+      log_event "event=NETWORK_RECOVERY host=$(hostname) destination=$destination interface=$interface"
+    fi
+  fi
+
+  if [ -n "$previous_interface" ] && [ "$previous_interface" != "$interface" ] \
+    && [[ "$previous_interface" =~ ^wg ]] && [[ "$interface" =~ ^wg ]]; then
+    log_event "event=PATH_CHANGE host=$(hostname) destination=$destination from=$previous_interface to=$interface"
+    if [[ "$previous_interface" =~ ^wg1 ]] && [[ "$interface" =~ ^wg2 ]]; then
+      log_event "event=FAILOVER host=$(hostname) destination=$destination from=primary to=backup"
+    elif [[ "$previous_interface" =~ ^wg2 ]] && [[ "$interface" =~ ^wg1 ]]; then
+      log_event "event=RECOVERY host=$(hostname) destination=$destination from=backup to=primary"
+    fi
+  fi
+
+  printf '%s %s\n' "$present" "$interface" > "$state_file"
+}
+{
+  echo '# HELP sre_wireguard_peer_up Whether the peer has completed a handshake recently.'
+  echo '# TYPE sre_wireguard_peer_up gauge'
+  echo '# HELP sre_wireguard_latest_handshake_age_seconds Age of the latest WireGuard peer handshake in seconds; -1 means no handshake has completed.'
+  echo '# TYPE sre_wireguard_latest_handshake_age_seconds gauge'
+  if command -v wg >/dev/null 2>&1; then
+    for dev in $(wg show interfaces 2>/dev/null); do
+      wg show "$dev" latest-handshakes 2>/dev/null | while read -r key ts; do
+        now=$(date +%s); up=0; age=-1
+        if [ "$ts" != 0 ]; then
+          age=$((now-ts))
+          [ "$age" -lt 180 ] && up=1
+        fi
+        printf 'sre_wireguard_peer_up{interface="%s",peer="%s"} %s\n' "$dev" "$key" "$up"
+        printf 'sre_wireguard_latest_handshake_age_seconds{interface="%s",peer="%s"} %s\n' "$dev" "$key" "$age"
+      done
+    done
+  fi
+  echo '# HELP sre_route_present Whether the stable MySQL route is installed.'
+  echo '# TYPE sre_route_present gauge'
+  for ip in 10.255.1.1 10.255.2.1; do
+    present=0; ip route get "$ip" >/dev/null 2>&1 && present=1
+    printf 'sre_route_present{destination="%s"} %s\n' "$ip" "$present"
+    dev=""
+    if [ "$present" -eq 1 ]; then
+      dev=$(ip route get "$ip" | awk '{for (i=1;i<=NF;i++) if ($i=="dev") print $(i+1)}' | head -n1)
+      [ -n "$dev" ] && printf 'sre_active_path{destination="%s",interface="%s"} 1\n' "$ip" "$dev"
+    fi
+    record_route_state "$ip" "$present" "$dev"
+  done
+  if command -v vtysh >/dev/null 2>&1; then
+    neighbors=$(vtysh -c 'show ip ospf neighbor' 2>/dev/null | awk '/Full/{n++} END{print n+0}')
+    echo "ospf_full_neighbors $neighbors"
+    bfd=$(vtysh -c 'show bfd peers' 2>/dev/null | awk '/up/{n++} END{print n+0}')
+    echo "sre_bfd_up_sessions $bfd"
+  fi
+} > "$tmp" && mv "$tmp" "$out"

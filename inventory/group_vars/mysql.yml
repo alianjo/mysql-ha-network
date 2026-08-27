@@ -1,0 +1,11 @@
+---
+mysql_package: mysql-server
+mysql_primary_bind_address: "10.255.1.1"
+mysql_replica_bind_address: "10.255.2.1"
+mysql_primary_server_id: 1
+mysql_replica_server_id: 2
+mysql_replication_user: repl_user
+mysql_replication_database: mysql_ha
+mysql_replication_table: ha_test
+mysql_replication_master: "10.255.1.1"
+mysql_replication_password: "{{ vault_mysql_replication_password }}"

@@ -1,0 +1,186 @@
+---
+- name: Validate WireGuard link model for this host
+  ansible.builtin.assert:
+    that:
+      - wireguard_local_links | length > 0
+      - item.name is match('^[a-zA-Z0-9_=+.-]{1,15}$')
+      - item.local_address is match('^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/(?:3[0-2]|[12]?[0-9])$')
+      - item.peer_address is match('^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/(?:3[0-2]|[12]?[0-9])$')
+      - item.peer_allowed_ip is match('^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/32$')
+      - item.peer_service_allowed_ip is match('^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/32$')
+      - item.local_listen_port | int > 0
+      - item.local_listen_port | int < 65536
+      - item.peer_endpoint_port | int > 0
+      - item.peer_endpoint_port | int < 65536
+      - item.peer_endpoint_address | string | length > 0
+      - not (item.peer_endpoint_address | string).startswith('REPLACE_ME_')
+      - item.path in ['wg1', 'wg2']
+      - item.ospf_cost | int > 0
+    fail_msg: >-
+      Invalid WireGuard definition for {{ inventory_hostname }} / {{ item.name }}.
+      Fill the required cloud endpoint addresses in inventory/hosts.yml before deployment.
+  loop: "{{ wireguard_local_links }}"
+  loop_control:
+    label: "{{ item.name }} -> {{ item.peer_host }}"
+
+- name: Install WireGuard tools
+  ansible.builtin.apt:
+    name: "{{ wireguard_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create WireGuard configuration directory
+  ansible.builtin.file:
+    path: "{{ wireguard_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create WireGuard key directory
+  ansible.builtin.file:
+    path: "{{ wireguard_key_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Generate private keys locally when absent
+  ansible.builtin.shell: |
+    set -o errexit -o nounset -o pipefail
+    umask 077
+    wg genkey > "{{ wireguard_key_directory }}/{{ item.name }}.private"
+  args:
+    executable: /bin/bash
+    creates: "{{ wireguard_key_directory }}/{{ item.name }}.private"
+  loop: "{{ wireguard_local_links }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: wireguard_private_key_generation
+  no_log: true
+
+- name: Enforce private-key permissions
+  ansible.builtin.file:
+    path: "{{ wireguard_key_directory }}/{{ item.name }}.private"
+    state: file
+    owner: root
+    group: root
+    mode: "{{ wireguard_private_key_mode }}"
+  loop: "{{ wireguard_local_links }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Derive public keys from host-local private keys
+  ansible.builtin.shell: |
+    set -o errexit -o nounset -o pipefail
+    wg pubkey < "{{ wireguard_key_directory }}/{{ item.name }}.private"
+  args:
+    executable: /bin/bash
+  loop: "{{ wireguard_local_links }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: wireguard_public_key_commands
+  changed_when: false
+
+- name: Validate derived WireGuard public keys
+  ansible.builtin.assert:
+    that:
+      - item.stdout | trim | length == 44
+    fail_msg: "Failed to derive a valid public key for {{ inventory_hostname }}/{{ item.item.name }}."
+  loop: "{{ wireguard_public_key_commands.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Persist public keys for operator inspection
+  ansible.builtin.copy:
+    content: "{{ item.stdout | trim }}\n"
+    dest: "{{ wireguard_key_directory }}/{{ item.item.name }}.public"
+    owner: root
+    group: root
+    mode: "{{ wireguard_public_key_mode }}"
+  loop: "{{ wireguard_public_key_commands.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Publish WireGuard public keys as host facts
+  ansible.builtin.set_fact:
+    wireguard_public_keys: >-
+      {{ wireguard_public_keys | default({})
+         | combine({item.item.name: item.stdout | trim}) }}
+  loop: "{{ wireguard_public_key_commands.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+# With Ansible's default linear strategy, the preceding set_fact task completes
+# on every host in the play before this validation/template phase begins.
+- name: Validate peer public keys are available
+  ansible.builtin.assert:
+    that:
+      - item.peer_host in hostvars
+      - hostvars[item.peer_host].wireguard_public_keys is defined
+      - item.name in hostvars[item.peer_host].wireguard_public_keys
+      - hostvars[item.peer_host].wireguard_public_keys[item.name] | length == 44
+    fail_msg: >-
+      Public key for peer {{ item.peer_host }}/{{ item.name }} is unavailable.
+      Run the WireGuard play against the full wireguard inventory group; do not
+      exclude a required peer with --limit during initial/key-rotation runs.
+  loop: "{{ wireguard_local_links }}"
+  loop_control:
+    label: "{{ item.name }} -> {{ item.peer_host }}"
+
+- name: Render WireGuard point-to-point configurations
+  ansible.builtin.template:
+    src: wg.conf.j2
+    dest: "{{ wireguard_directory }}/{{ item.name }}.conf"
+    owner: root
+    group: root
+    mode: "{{ wireguard_config_mode }}"
+  loop: "{{ wireguard_local_links }}"
+  loop_control:
+    label: "{{ item.name }} -> {{ item.peer_host }}"
+  register: wireguard_config_templates
+
+- name: Parse generated configs with wg-quick
+  ansible.builtin.command:
+    argv:
+      - wg-quick
+      - strip
+      - "{{ wireguard_directory }}/{{ item.name }}.conf"
+  loop: "{{ wireguard_local_links }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+
+- name: Collect interfaces whose key or config changed
+  ansible.builtin.set_fact:
+    wireguard_changed_interfaces: >-
+      {{ ((wireguard_private_key_generation.results
+            | selectattr('changed', 'equalto', true)
+            | map(attribute='item.name')
+            | list)
+          + (wireguard_config_templates.results
+            | selectattr('changed', 'equalto', true)
+            | map(attribute='item.name')
+            | list)) | unique | list }}
+
+- name: Restart changed WireGuard interfaces
+  ansible.builtin.systemd_service:
+    name: "wg-quick@{{ item }}"
+    enabled: true
+    state: restarted
+    daemon_reload: true
+  loop: "{{ wireguard_changed_interfaces }}"
+  when:
+    - wireguard_manage_services | bool
+    - wireguard_changed_interfaces | length > 0
+
+- name: Ensure WireGuard interfaces are enabled and running
+  ansible.builtin.systemd_service:
+    name: "wg-quick@{{ item.name }}"
+    enabled: true
+    state: started
+  loop: "{{ wireguard_local_links }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: wireguard_manage_services | bool

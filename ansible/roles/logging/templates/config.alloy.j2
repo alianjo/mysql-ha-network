@@ -1,0 +1,41 @@
+logging { level = "info" }
+
+local.file_match "service_logs" {
+  path_targets = [
+    {__path__ = "/var/log/*.log", job = "system", component = "system", host = "{{ inventory_hostname }}", site = "{{ site }}"},
+    {__path__ = "/var/log/mysql/*.log", job = "mysql", component = "mysql", host = "{{ inventory_hostname }}", site = "{{ site }}"},
+    {__path__ = "/var/log/frr/*.log", job = "routing", component = "routing", host = "{{ inventory_hostname }}", site = "{{ site }}"},
+    {__path__ = "/var/log/wireguard/*.log", job = "wireguard", component = "wireguard", host = "{{ inventory_hostname }}", site = "{{ site }}"},
+    {__path__ = "{{ common_log_dir | default('/var/log/mysql-ha-network') }}/*.log", job = "sre-ha", component = "ha", host = "{{ inventory_hostname }}", site = "{{ site }}"},
+  ]
+}
+
+loki.relabel "journal_labels" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal_syslog_identifier"]
+    target_label  = "service"
+  }
+}
+
+loki.source.file "service_logs" {
+  targets    = local.file_match.service_logs.targets
+  forward_to = [loki.write.central.receiver]
+}
+
+loki.source.journal "systemd" {
+  max_age       = "5m"
+  relabel_rules = loki.relabel.journal_labels.rules
+  labels        = {job = "journal", component = "system", host = "{{ inventory_hostname }}", site = "{{ site }}"}
+  forward_to = [loki.write.central.receiver]
+}
+
+loki.write "central" {
+  endpoint { url = "{{ loki_url }}" }
+}

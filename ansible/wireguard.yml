@@ -1,0 +1,9 @@
+---
+- name: Deploy independent WireGuard transit links
+  hosts: wireguard
+  become: true
+  gather_facts: true
+  strategy: linear
+  roles:
+    - role: common
+    - role: wireguard

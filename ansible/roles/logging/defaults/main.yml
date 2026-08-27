@@ -1,0 +1,5 @@
+---
+alloy_version: "1.3.1"
+alloy_arch: amd64
+monitoring_stack_host: monitor-01
+loki_url: "http://{{ hostvars[monitoring_stack_host].ansible_host }}:{{ loki_port | default(3100) }}/loki/api/v1/push"

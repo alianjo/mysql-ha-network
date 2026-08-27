@@ -1,0 +1,6 @@
+#!/usr/sbin/nft -f
+
+# Managed by Ansible. Component roles add files under {{ common_nftables_include_dir }}.
+# This Phase 2 foundation deliberately installs no restrictive base chain so that
+# Ansible/SSH access cannot be locked out before cloud and service rules are known.
+include "{{ common_nftables_include_dir }}/*.nft"

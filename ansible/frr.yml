@@ -1,0 +1,10 @@
+---
+- name: Deploy FRRouting OSPFv2 and BFD
+  hosts: routing
+  become: true
+  gather_facts: true
+  strategy: linear
+  roles:
+    - role: common
+    - role: wireguard
+    - role: frr

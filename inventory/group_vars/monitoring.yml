@@ -1,0 +1,19 @@
+---
+monitoring_stack_host: monitor-01
+monitoring_bind_address: 0.0.0.0
+
+prometheus_port: 9090
+grafana_port: 3000
+alertmanager_port: 9093
+blackbox_exporter_port: 9115
+loki_port: 3100
+node_exporter_port: 9100
+mysqld_exporter_port: 9104
+
+monitoring_scrape_interval: 15s
+monitoring_evaluation_interval: 15s
+
+observability_sites:
+  - tabriz
+  - shiraz
+  - observability

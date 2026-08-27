@@ -1,0 +1,21 @@
+---
+wireguard_packages:
+  - wireguard-tools
+
+wireguard_directory: /etc/wireguard
+wireguard_key_directory: "{{ wireguard_directory }}/keys"
+wireguard_config_mode: "0600"
+wireguard_private_key_mode: "0600"
+wireguard_public_key_mode: "0644"
+wireguard_persistent_keepalive: 25
+wireguard_table_mode: "off"
+wireguard_ospf_multicast_allowed_ips:
+  - 224.0.0.5/32
+  - 224.0.0.6/32
+wireguard_manage_services: true
+
+# Populated per host from inventory/group_vars/wireguard.yml.
+wireguard_local_links: >-
+  {{ wireguard_links
+     | selectattr('local_host', 'equalto', inventory_hostname)
+     | list }}

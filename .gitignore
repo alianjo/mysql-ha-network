@@ -1,0 +1,26 @@
+# Secrets
+inventory/group_vars/vault.yml
+*.vault
+*.key
+*.private
+*.pem
+
+# Runtime artifacts
+artifacts/*
+!artifacts/.gitkeep
+
+# Ansible
+*.retry
+.ansible/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

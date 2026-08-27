@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -u
+
+out={{ node_exporter_textfile_dir | default('/var/lib/node_exporter/textfile_collector') }}/mysql_connectivity.prom
+tmp="${out}.tmp"
+state_dir={{ common_state_dir | default('/var/lib/mysql-ha-network') }}
+state_file="$state_dir/mysql-peer-connectivity.state"
+peer_host="{{ mysql_connectivity_peer_host }}"
+peer_ip="{{ mysql_connectivity_peer_ip }}"
+mkdir -p "$(dirname "$out")" "$state_dir"
+
+route_line=$(ip -o route get "$peer_ip" 2>/dev/null | head -n 1 || true)
+interface=$(printf '%s\n' "$route_line" | awk '{for (i=1; i<=NF; i++) if ($i == "dev") {print $(i+1); exit}}')
+path=unknown
+case "$interface" in
+  wg1*) path=primary ;;
+  wg2*) path=backup ;;
+esac
+
+ping_output=$(ping -n -q -c {{ mysql_connectivity_probe_count }} -i {{ mysql_connectivity_probe_interval_seconds }} -W {{ mysql_connectivity_probe_timeout_seconds }} "$peer_ip" 2>&1 || true)
+received=$(printf '%s\n' "$ping_output" | awk -F', ' '/packets transmitted/ {value=$2; sub(/ received.*/, "", value); print value; exit}')
+packet_loss=$(printf '%s\n' "$ping_output" | awk -F', ' '/packet loss/ {value=$3; sub(/% packet loss.*/, "", value); print value; exit}')
+average_ms=$(printf '%s\n' "$ping_output" | awk -F' = ' '/(rtt|round-trip)/ {split($2, values, "/"); print values[2]; exit}')
+
+received=${received:-0}
+packet_loss=${packet_loss:-100}
+icmp_up=0
+[ "$received" -gt 0 ] && icmp_up=1
+latency_seconds=-1
+if [ -n "$average_ms" ]; then
+  latency_seconds=$(awk -v value="$average_ms" 'BEGIN {printf "%.6f", value / 1000}')
+fi
+
+tcp_up=0
+if nc -z -w {{ mysql_connectivity_tcp_timeout_seconds }} "$peer_ip" {{ mysql_metrics_port }} >/dev/null 2>&1; then
+  tcp_up=1
+fi
+
+{
+  echo '# HELP sre_mysql_peer_icmp_up Whether the remote MySQL stable service address responds to ICMP from this MySQL host.'
+  echo '# TYPE sre_mysql_peer_icmp_up gauge'
+  printf 'sre_mysql_peer_icmp_up{peer="%s",destination="%s",interface="%s",path="%s"} %s\n' "$peer_host" "$peer_ip" "$interface" "$path" "$icmp_up"
+  echo '# HELP sre_mysql_peer_tcp_up Whether TCP MySQL is reachable on the remote stable service address from this MySQL host.'
+  echo '# TYPE sre_mysql_peer_tcp_up gauge'
+  printf 'sre_mysql_peer_tcp_up{peer="%s",destination="%s",interface="%s",path="%s",port="%s"} %s\n' "$peer_host" "$peer_ip" "$interface" "$path" "{{ mysql_metrics_port }}" "$tcp_up"
+  echo '# HELP sre_mysql_peer_packet_loss_percent ICMP packet loss percentage to the remote MySQL stable service address.'
+  echo '# TYPE sre_mysql_peer_packet_loss_percent gauge'
+  printf 'sre_mysql_peer_packet_loss_percent{peer="%s",destination="%s",interface="%s",path="%s"} %s\n' "$peer_host" "$peer_ip" "$interface" "$path" "$packet_loss"
+  echo '# HELP sre_mysql_peer_latency_seconds Average ICMP latency to the remote MySQL stable service address in seconds; -1 means no reply.'
+  echo '# TYPE sre_mysql_peer_latency_seconds gauge'
+  printf 'sre_mysql_peer_latency_seconds{peer="%s",destination="%s",interface="%s",path="%s"} %s\n' "$peer_host" "$peer_ip" "$interface" "$path" "$latency_seconds"
+} > "$tmp" && mv "$tmp" "$out"
+
+availability=up
+[ "$icmp_up" -eq 1 ] && [ "$tcp_up" -eq 1 ] || availability=down
+previous_availability=""
+previous_path=""
+if [ -s "$state_file" ]; then
+  IFS=' ' read -r previous_availability previous_path < "$state_file" || true
+fi
+
+if [ -n "$previous_availability" ] && [ "$previous_availability" != "$availability" ]; then
+  if [ "$availability" = down ]; then
+    logger -p daemon.warning -t sre-ha-event -- "event=NETWORK_FAILURE host=$(hostname) peer=$peer_host destination=$peer_ip icmp_up=$icmp_up tcp_up=$tcp_up packet_loss_percent=$packet_loss"
+  else
+    logger -p daemon.notice -t sre-ha-event -- "event=NETWORK_RECOVERY host=$(hostname) peer=$peer_host destination=$peer_ip path=$path latency_seconds=$latency_seconds"
+  fi
+fi
+
+if [ -n "$previous_path" ] && [ "$previous_path" != "$path" ] \
+  && [ "$previous_path" != unknown ] && [ "$path" != unknown ]; then
+  logger -p daemon.notice -t sre-ha-event -- "event=PATH_CHANGE host=$(hostname) peer=$peer_host from_path=$previous_path to_path=$path"
+  if [ "$previous_path" = primary ] && [ "$path" = backup ]; then
+    logger -p daemon.warning -t sre-ha-event -- "event=FAILOVER host=$(hostname) peer=$peer_host from=primary to=backup"
+  elif [ "$previous_path" = backup ] && [ "$path" = primary ]; then
+    logger -p daemon.notice -t sre-ha-event -- "event=RECOVERY host=$(hostname) peer=$peer_host from=backup to=primary"
+  fi
+fi
+
+printf '%s %s\n' "$availability" "$path" > "$state_file"

@@ -1,0 +1,14 @@
+---
+# Full deployment entrypoint. Keep this order: the network must be available
+# before MySQL replication and the monitoring agents are configured.
+- name: Apply common Ubuntu baseline
+  import_playbook: common.yml
+
+- name: Deploy dual-path network and routing
+  import_playbook: network.yml
+
+- name: Configure MySQL replication
+  import_playbook: mysql.yml
+
+- name: Deploy monitoring and centralized logging
+  import_playbook: monitoring.yml

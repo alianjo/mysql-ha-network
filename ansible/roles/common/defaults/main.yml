@@ -1,0 +1,30 @@
+---
+common_supported_ubuntu_releases:
+  - "22.04"
+  - "24.04"
+
+common_manage_hostname: true
+common_manage_hosts_file: "{{ sre_manage_etc_hosts | default(true) }}"
+common_manage_nftables_foundation: true
+common_nftables_include_dir: /etc/nftables.d
+common_state_dir: /var/lib/mysql-ha-network
+common_log_dir: /var/log/mysql-ha-network
+common_config_dir: /etc/mysql-ha-network
+node_exporter_textfile_dir: /var/lib/node_exporter/textfile_collector
+
+common_sysctl:
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv4.conf.default.accept_source_route: 0
+
+# Multi-homed routing nodes must not use strict reverse-path filtering. OSPF may
+# legitimately select a different return interface while paths converge.
+routing_sysctl:
+  net.ipv4.conf.all.rp_filter: 0
+  net.ipv4.conf.default.rp_filter: 0
+
+transit_router_sysctl:
+  net.ipv4.ip_forward: 1

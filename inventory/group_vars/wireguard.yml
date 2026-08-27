@@ -1,0 +1,119 @@
+---
+wireguard_packages:
+  - wireguard-tools
+wireguard_directory: /etc/wireguard
+wireguard_key_directory: /etc/wireguard/keys
+wireguard_persistent_keepalive: 25
+wireguard_table_mode: "off"
+wireguard_ospf_multicast_allowed_ips:
+  - 224.0.0.5/32
+  - 224.0.0.6/32
+
+# Each entry is one independent point-to-point WireGuard link.
+# AllowedIPs contain the peer transit /32, one peer-side service /32, and OSPFv2 multicast /32s.
+# The service selector is required by WireGuard cryptokey routing/source validation.
+# Table=off prevents route injection; end-to-end service routes are selected by OSPF.
+wireguard_links:
+  - name: wg1a
+    path: wg1
+    local_host: tabriz-mysql01
+    local_address: 10.10.1.1/30
+    local_listen_port: 51811
+    peer_host: tabriz-wg01
+    peer_address: 10.10.1.2/30
+    peer_endpoint_address: "{{ hostvars['tabriz-wg01'].public_ip }}"
+    peer_endpoint_port: 51811
+    peer_allowed_ip: 10.10.1.2/32
+    peer_service_allowed_ip: 10.255.2.1/32
+    ospf_cost: 10
+
+  - name: wg1a
+    path: wg1
+    local_host: tabriz-wg01
+    local_address: 10.10.1.2/30
+    local_listen_port: 51811
+    peer_host: tabriz-mysql01
+    peer_address: 10.10.1.1/30
+    peer_endpoint_address: "{{ hostvars['tabriz-mysql01'].public_ip }}"
+    peer_endpoint_port: 51811
+    peer_allowed_ip: 10.10.1.1/32
+    peer_service_allowed_ip: 10.255.1.1/32
+    ospf_cost: 10
+
+  - name: wg1b
+    path: wg1
+    local_host: tabriz-wg01
+    local_address: 10.10.1.5/30
+    local_listen_port: 51812
+    peer_host: shiraz-mysql01
+    peer_address: 10.10.1.6/30
+    peer_endpoint_address: "{{ hostvars['shiraz-mysql01'].public_ip }}"
+    peer_endpoint_port: 51812
+    peer_allowed_ip: 10.10.1.6/32
+    peer_service_allowed_ip: 10.255.2.1/32
+    ospf_cost: 10
+
+  - name: wg1b
+    path: wg1
+    local_host: shiraz-mysql01
+    local_address: 10.10.1.6/30
+    local_listen_port: 51812
+    peer_host: tabriz-wg01
+    peer_address: 10.10.1.5/30
+    peer_endpoint_address: "{{ hostvars['tabriz-wg01'].public_ip }}"
+    peer_endpoint_port: 51812
+    peer_allowed_ip: 10.10.1.5/32
+    peer_service_allowed_ip: 10.255.1.1/32
+    ospf_cost: 10
+
+  - name: wg2a
+    path: wg2
+    local_host: tabriz-mysql01
+    local_address: 10.10.2.1/30
+    local_listen_port: 51821
+    peer_host: shiraz-wg02
+    peer_address: 10.10.2.2/30
+    peer_endpoint_address: "{{ hostvars['shiraz-wg02'].public_ip }}"
+    peer_endpoint_port: 51821
+    peer_allowed_ip: 10.10.2.2/32
+    peer_service_allowed_ip: 10.255.2.1/32
+    ospf_cost: 100
+
+  - name: wg2a
+    path: wg2
+    local_host: shiraz-wg02
+    local_address: 10.10.2.2/30
+    local_listen_port: 51821
+    peer_host: tabriz-mysql01
+    peer_address: 10.10.2.1/30
+    peer_endpoint_address: "{{ hostvars['tabriz-mysql01'].public_ip }}"
+    peer_endpoint_port: 51821
+    peer_allowed_ip: 10.10.2.1/32
+    peer_service_allowed_ip: 10.255.1.1/32
+    ospf_cost: 100
+
+  - name: wg2b
+    path: wg2
+    local_host: shiraz-wg02
+    local_address: 10.10.2.5/30
+    local_listen_port: 51822
+    peer_host: shiraz-mysql01
+    peer_address: 10.10.2.6/30
+    peer_endpoint_address: "{{ hostvars['shiraz-mysql01'].public_ip }}"
+    peer_endpoint_port: 51822
+    peer_allowed_ip: 10.10.2.6/32
+    peer_service_allowed_ip: 10.255.2.1/32
+    ospf_cost: 100
+
+  - name: wg2b
+    path: wg2
+    local_host: shiraz-mysql01
+    local_address: 10.10.2.6/30
+    local_listen_port: 51822
+    peer_host: shiraz-wg02
+    peer_address: 10.10.2.5/30
+    peer_endpoint_address: "{{ hostvars['shiraz-wg02'].public_ip }}"
+    peer_endpoint_port: 51822
+    peer_allowed_ip: 10.10.2.5/32
+    peer_service_allowed_ip: 10.255.1.1/32
+    ospf_cost: 100

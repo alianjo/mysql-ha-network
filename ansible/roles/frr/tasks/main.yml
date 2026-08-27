@@ -1,0 +1,125 @@
+---
+- name: Validate FRR host model
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname in (groups['routing'] | default([]))
+      - frr_local_links | length > 0
+      - inventory_hostname in frr_router_ids
+      - frr_router_ids[inventory_hostname] is match('^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$')
+      - ospf_area is match('^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$')
+      - (ospf_cost_primary | int) > 0
+      - (ospf_cost_backup | int) > (ospf_cost_primary | int)
+      - (bfd_transmit_interval_ms | int) >= 300
+      - (bfd_receive_interval_ms | int) >= 300
+      - (bfd_multiplier | int) >= 3
+      - routing_mode == 'primary_backup'
+    fail_msg: >-
+      Invalid FRR/OSPF/BFD variables for {{ inventory_hostname }}. The default
+      the configured mode requires unique router IDs, primary cost lower than backup,
+      cloud-safe BFD timers, and routing_mode=primary_backup.
+
+- name: Validate local OSPF interfaces
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[a-zA-Z0-9_=+.-]{1,15}$')
+      - (item.ospf_cost | int) in [(ospf_cost_primary | int), (ospf_cost_backup | int)]
+      - item.path in ['wg1', 'wg2']
+      - (item.path == 'wg1' and (item.ospf_cost | int) == (ospf_cost_primary | int)) or
+        (item.path == 'wg2' and (item.ospf_cost | int) == (ospf_cost_backup | int))
+    fail_msg: "OSPF cost/path mismatch for {{ inventory_hostname }}/{{ item.name }}."
+  loop: "{{ frr_local_links }}"
+  loop_control:
+    label: "{{ item.name }} cost={{ item.ospf_cost }}"
+
+- name: Install FRRouting packages
+  ansible.builtin.apt:
+    name: "{{ frr_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable zebra daemon
+  ansible.builtin.lineinfile:
+    path: "{{ frr_daemons_path }}"
+    regexp: '^zebra='
+    line: 'zebra=yes'
+    owner: root
+    group: frr
+    mode: "0640"
+  notify: Restart FRR
+
+- name: Enable OSPFv2 daemon
+  ansible.builtin.lineinfile:
+    path: "{{ frr_daemons_path }}"
+    regexp: '^ospfd='
+    line: 'ospfd=yes'
+    owner: root
+    group: frr
+    mode: "0640"
+  notify: Restart FRR
+
+- name: Enable BFD daemon
+  ansible.builtin.lineinfile:
+    path: "{{ frr_daemons_path }}"
+    regexp: '^bfdd='
+    line: 'bfdd=yes'
+    owner: root
+    group: frr
+    mode: "0640"
+  notify: Restart FRR
+
+- name: Enable integrated vtysh configuration
+  ansible.builtin.lineinfile:
+    path: "{{ frr_daemons_path }}"
+    regexp: '^vtysh_enable='
+    line: 'vtysh_enable=yes'
+    owner: root
+    group: frr
+    mode: "0640"
+  notify: Restart FRR
+
+- name: Render persistent MySQL service loopback unit
+  ansible.builtin.template:
+    src: mysql-loopback.service.j2
+    dest: "/etc/systemd/system/{{ frr_loopback_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: frr_loopback_unit
+  when: mysql_loopbacks[inventory_hostname] is defined
+
+- name: Enable and apply stable MySQL service loopback
+  ansible.builtin.systemd_service:
+    name: "{{ frr_loopback_service_name }}.service"
+    enabled: true
+    daemon_reload: true
+    state: "{{ 'restarted' if frr_loopback_unit.changed else 'started' }}"
+  when:
+    - mysql_loopbacks[inventory_hostname] is defined
+    - frr_manage_service | bool
+
+- name: Render integrated FRR configuration
+  ansible.builtin.template:
+    src: frr.conf.j2
+    dest: "{{ frr_config_path }}"
+    owner: frr
+    group: frr
+    mode: "0640"
+    validate: "/usr/bin/vtysh -C -f %s"
+  notify: Restart FRR
+
+- name: Validate FRR configuration with vtysh dry-run
+  ansible.builtin.command:
+    argv:
+      - vtysh
+      - -C
+      - -f
+      - "{{ frr_config_path }}"
+  changed_when: false
+
+- name: Ensure FRR is enabled and running
+  ansible.builtin.systemd_service:
+    name: frr
+    enabled: true
+    state: started
+  when: frr_manage_service | bool

@@ -1,0 +1,24 @@
+---
+# FRRouting / OSPFv2 / BFD configuration shared by the four routing nodes.
+frr_packages:
+  - frr
+  - frr-pythontools
+frr_config_path: /etc/frr/frr.conf
+frr_daemons_path: /etc/frr/daemons
+frr_bfd_profile_name: SRE_OSPF
+frr_log_level: informational
+
+# Router IDs are stable protocol identifiers. They do not need to be assigned
+# as Linux addresses and deliberately do not depend on cloud public/private IPs.
+frr_router_ids:
+  tabriz-mysql01: 10.254.0.1
+  tabriz-wg01: 10.254.0.2
+  shiraz-wg02: 10.254.0.3
+  shiraz-mysql01: 10.254.0.4
+
+# The OSPF defaults remain conservative; BFD provides faster failure detection.
+ospf_hello_interval_seconds: 10
+ospf_dead_interval_seconds: 40
+
+# Stable MySQL service addresses are persisted on lo before FRR starts.
+frr_loopback_service_name: sre-mysql-loopback

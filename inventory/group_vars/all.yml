@@ -1,0 +1,41 @@
+---
+# Operating system baseline
+ansible_controller_cidr: REPLACE_ME_ANSIBLE_CONTROLLER_CIDR
+sre_timezone: UTC
+sre_manage_etc_hosts: true
+sre_common_packages:
+  - ca-certificates
+  - curl
+  - jq
+  - nftables
+  - python3
+  - python3-pip
+
+# Stable service loopbacks. MySQL replication must use these addresses.
+mysql_loopbacks:
+  tabriz-mysql01: 10.255.1.1/32
+  shiraz-mysql01: 10.255.2.1/32
+
+mysql_loopback_ips:
+  tabriz-mysql01: 10.255.1.1
+  shiraz-mysql01: 10.255.2.1
+
+# OSPF/BFD policy
+ospf_area: 0.0.0.0
+ospf_cost_primary: 10
+ospf_cost_backup: 100
+ospf_cost_unhealthy: 1000
+
+bfd_transmit_interval_ms: 500
+bfd_receive_interval_ms: 500
+bfd_multiplier: 3
+
+# End-to-end data-plane health controller.
+health_check_interval_seconds: 1
+health_failure_threshold: 3
+health_success_threshold: 5
+health_recovery_hold_down_seconds: 30
+health_probe_timeout_seconds: 1
+
+# Default routing mode required by this design.
+routing_mode: primary_backup

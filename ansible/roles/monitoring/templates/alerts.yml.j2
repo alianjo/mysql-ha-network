@@ -1,0 +1,75 @@
+groups:
+  - name: sre-ha-network
+    rules:
+      - alert: WireGuardPeerDown
+        expr: sre_wireguard_peer_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "WireGuard peer is down", description: "{{ '$labels.host' }} {{ '$labels.interface' }} has no recent handshake."}
+      - alert: MySQLRouteMissing
+        expr: sre_route_present{role!="monitoring"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "MySQL route missing", description: "{{ '$labels.host' }} cannot resolve {{ '$labels.destination' }}."}
+      - alert: OSPFNeighborLoss
+        expr: ospf_full_neighbors < 2
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: "OSPF adjacency loss", description: "{{ '$labels.instance' }} has fewer than two full neighbors."}
+      - alert: BFDSessionLoss
+        expr: sre_bfd_up_sessions < 2
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "BFD session loss", description: "{{ '$labels.instance' }} has fewer than two BFD sessions up."}
+      - alert: NetworkProbeFailed
+        expr: probe_success == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "Network connectivity failure", description: "Probe to {{ '$labels.instance' }} is failing."}
+      - alert: NetworkLatencyHigh
+        expr: probe_duration_seconds > 0.2
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Network latency is high", description: "Probe latency to {{ '$labels.instance' }} is {{ '$value' }} seconds."}
+      - alert: MySQLPeerICMPFailure
+        expr: sre_mysql_peer_icmp_up == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "MySQL peer ICMP connectivity failed", description: "{{ '$labels.host' }} cannot reach MySQL peer {{ '$labels.peer' }} at {{ '$labels.destination' }} over the {{ '$labels.path' }} path."}
+      - alert: MySQLPeerTCPFailure
+        expr: sre_mysql_peer_tcp_up == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "MySQL peer TCP connectivity failed", description: "{{ '$labels.host' }} cannot connect to MySQL on {{ '$labels.peer' }} at {{ '$labels.destination' }}:{{ '$labels.port' }}."}
+      - alert: MySQLPeerPacketLossHigh
+        expr: sre_mysql_peer_packet_loss_percent > 5
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: "MySQL peer packet loss is high", description: "{{ '$labels.host' }} sees {{ '$value' }}% packet loss to {{ '$labels.peer' }} over {{ '$labels.path' }}."}
+      - alert: MySQLPeerLatencyHigh
+        expr: sre_mysql_peer_latency_seconds > 0.2
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "MySQL peer latency is high", description: "{{ '$labels.host' }} sees {{ '$value' }} seconds latency to {{ '$labels.peer' }} over {{ '$labels.path' }}."}
+      - alert: BackupPathActive
+        expr: sre_active_path{role=~"mysql_primary|mysql_replica",interface=~"wg2.*"} == 1
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: "Backup network path active", description: "{{ '$labels.host' }} is using {{ '$labels.interface' }} for {{ '$labels.destination' }}."}
+  - name: sre-ha-mysql
+    rules:
+      - alert: MySQLReplicationStopped
+        expr: mysql_replication_configured == 1 and (mysql_replication_io_running == 0 or mysql_replication_sql_running == 0)
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "MySQL replication stopped", description: "IO or SQL replication thread is not running."}
+      - alert: MySQLReplicationLag
+        expr: mysql_replication_seconds_behind_master > 30
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "MySQL replication lag", description: "Replication lag is {{ '$value' }} seconds."}
+      - alert: HostDown
+        expr: up{job="node"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "Host exporter down", description: "{{ '$labels.host' }} is not exporting metrics."}

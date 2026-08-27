@@ -1,0 +1,12 @@
+[Unit]
+Description=Grafana Alloy log collector
+After=network-online.target
+
+[Service]
+User=alloy
+ExecStart=/usr/local/bin/alloy run --storage.path=/var/lib/alloy /etc/alloy/config.alloy
+Restart=always
+ReadWritePaths=/var/lib/alloy
+
+[Install]
+WantedBy=multi-user.target

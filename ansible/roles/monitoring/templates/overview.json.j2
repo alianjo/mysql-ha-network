@@ -1,0 +1,116 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"min": 0, "max": 1, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "sre_active_path{role=\"mysql_primary\",interface=~\"wg[12].*\"}", "legendFormat": "{{ '{{host}}' }} → {{ '{{destination}}' }} via {{ '{{interface}}' }}", "refId": "A"}],
+      "title": "Selected replication path (primary → replica)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "ospf_full_neighbors", "legendFormat": "{{ '{{host}}' }} OSPF full neighbors", "refId": "A"},
+        {"expr": "sre_bfd_up_sessions", "legendFormat": "{{ '{{host}}' }} BFD sessions", "refId": "B"}
+      ],
+      "title": "Routing control-plane status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "sre_wireguard_latest_handshake_age_seconds >= 0", "legendFormat": "{{ '{{host}}' }} {{ '{{interface}}' }}", "refId": "A"}],
+      "title": "WireGuard latest handshake age",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"min": 0, "max": 1, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "mysql_server_up{role=~\"mysql_primary|mysql_replica\"}", "legendFormat": "{{ '{{host}}' }} server up", "refId": "A"},
+        {"expr": "mysql_read_only{role=~\"mysql_primary|mysql_replica\"}", "legendFormat": "{{ '{{host}}' }} read-only", "refId": "B"}
+      ],
+      "title": "MySQL server health and role",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 5,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "mysql_threads_connected{role=~\"mysql_primary|mysql_replica\"}", "legendFormat": "{{ '{{host}}' }} connected", "refId": "A"},
+        {"expr": "mysql_threads_running{role=~\"mysql_primary|mysql_replica\"}", "legendFormat": "{{ '{{host}}' }} running", "refId": "B"}
+      ],
+      "title": "MySQL connections and active threads",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "rate(mysql_questions_total{role=~\"mysql_primary|mysql_replica\"}[5m])", "legendFormat": "{{ '{{host}}' }} queries/sec", "refId": "A"},
+        {"expr": "rate(mysql_slow_queries_total{role=~\"mysql_primary|mysql_replica\"}[5m])", "legendFormat": "{{ '{{host}}' }} slow queries/sec", "refId": "B"}
+      ],
+      "title": "MySQL query workload",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"min": 0, "max": 1, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "id": 7,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "mysql_replication_configured{role=\"mysql_replica\"}", "legendFormat": "{{ '{{host}}' }} configured", "refId": "A"},
+        {"expr": "mysql_replication_io_running{role=\"mysql_replica\"}", "legendFormat": "{{ '{{host}}' }} IO thread", "refId": "B"},
+        {"expr": "mysql_replication_sql_running{role=\"mysql_replica\"}", "legendFormat": "{{ '{{host}}' }} SQL thread", "refId": "C"}
+      ],
+      "title": "MySQL replication status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"min": 0, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "mysql_replication_seconds_behind_master{role=\"mysql_replica\"} >= 0", "legendFormat": "{{ '{{host}}' }}", "refId": "A"}],
+      "title": "MySQL replication lag",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "id": 9,
+      "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyJSON": false, "showCommonLabels": false, "showLabels": true, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
+      "targets": [{"expr": "{service=\"sre-ha-event\"} |~ \"NETWORK_FAILURE|NETWORK_RECOVERY|PATH_CHANGE|FAILOVER|RECOVERY|REPLICATION\"", "refId": "A"}],
+      "title": "HA failure, path, recovery, and replication events",
+      "type": "logs"
+    }
+  ],
+  "schemaVersion": 39,
+  "time": {"from": "now-6h", "to": "now"},
+  "title": "MySQL HA Overview",
+  "version": 3
+}

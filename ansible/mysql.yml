@@ -1,0 +1,16 @@
+---
+- name: Configure MySQL primary
+  hosts: mysql_primary
+  become: true
+  vars_files:
+    - ../inventory/group_vars/vault.yml
+  roles:
+    - mysql_primary
+
+- name: Configure MySQL replica
+  hosts: mysql_replica
+  become: true
+  vars_files:
+    - ../inventory/group_vars/vault.yml
+  roles:
+    - mysql_replica

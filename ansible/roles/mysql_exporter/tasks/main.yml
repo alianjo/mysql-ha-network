@@ -1,0 +1,99 @@
+---
+- name: Install MySQL and connectivity collector dependencies
+  ansible.builtin.apt:
+    name: [mysql-client, iputils-ping, netcat-openbsd]
+    state: present
+    update_cache: true
+
+- name: Resolve the remote MySQL service identity
+  ansible.builtin.assert:
+    that:
+      - (groups['mysql'] | reject('equalto', inventory_hostname) | list | length) == 1
+      - mysql_loopback_ips is defined
+      - inventory_hostname in mysql_loopback_ips
+      - (groups['mysql'] | reject('equalto', inventory_hostname) | list | first) in mysql_loopback_ips
+    fail_msg: The MySQL connectivity collector requires exactly two MySQL hosts and stable loopback addresses.
+
+- name: Set remote MySQL connectivity probe target
+  ansible.builtin.set_fact:
+    mysql_connectivity_peer_host: "{{ mysql_other_hosts | first }}"
+    mysql_connectivity_peer_ip: "{{ mysql_loopback_ips[mysql_other_hosts | first] }}"
+  vars:
+    mysql_other_hosts: "{{ groups['mysql'] | reject('equalto', inventory_hostname) | list }}"
+
+- name: Create least-privilege metrics user
+  community.mysql.mysql_user:
+    name: "{{ mysql_metrics_user }}"
+    password: "{{ mysql_metrics_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+    priv: "*.*:PROCESS,REPLICATION CLIENT,SELECT"
+    host: localhost
+    state: present
+  no_log: true
+
+- name: Install MySQL metrics client credentials
+  ansible.builtin.template:
+    src: metrics.cnf.j2
+    dest: /etc/mysql/sre-metrics.cnf
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
+- name: Install MySQL replication metrics collector
+  ansible.builtin.template:
+    src: mysql-replication-metrics.sh.j2
+    dest: /usr/local/bin/mysql-replication-metrics
+    mode: '0750'
+    owner: root
+    group: root
+
+- name: Install MySQL peer connectivity metrics collector
+  ansible.builtin.template:
+    src: mysql-connectivity-metrics.sh.j2
+    dest: /usr/local/bin/mysql-connectivity-metrics
+    mode: '0750'
+    owner: root
+    group: root
+
+- name: Run MySQL replication collector
+  ansible.builtin.command: /usr/local/bin/mysql-replication-metrics
+  changed_when: false
+
+- name: Run MySQL peer connectivity collector
+  ansible.builtin.command: /usr/local/bin/mysql-connectivity-metrics
+  changed_when: false
+
+- name: Install MySQL collector timer
+  ansible.builtin.template:
+    src: mysql-replication-metrics.timer.j2
+    dest: /etc/systemd/system/mysql-replication-metrics.timer
+    mode: '0644'
+
+- name: Install MySQL collector service
+  ansible.builtin.template:
+    src: mysql-replication-metrics.service.j2
+    dest: /etc/systemd/system/mysql-replication-metrics.service
+    mode: '0644'
+
+- name: Install MySQL peer connectivity collector timer
+  ansible.builtin.template:
+    src: mysql-connectivity-metrics.timer.j2
+    dest: /etc/systemd/system/mysql-connectivity-metrics.timer
+    mode: '0644'
+
+- name: Install MySQL peer connectivity collector service
+  ansible.builtin.template:
+    src: mysql-connectivity-metrics.service.j2
+    dest: /etc/systemd/system/mysql-connectivity-metrics.service
+    mode: '0644'
+
+- name: Enable MySQL collector timer
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - mysql-replication-metrics.timer
+    - mysql-connectivity-metrics.timer

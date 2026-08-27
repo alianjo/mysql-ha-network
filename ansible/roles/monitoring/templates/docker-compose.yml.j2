@@ -1,0 +1,36 @@
+services:
+  prometheus:
+    image: {{ prometheus_image }}
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d", "--web.enable-lifecycle"]
+    volumes: ["./prometheus:/etc/prometheus", "prometheus-data:/prometheus"]
+    ports: ["{{ monitoring_bind_address }}:{{ prometheus_port }}:9090"]
+    restart: unless-stopped
+  alertmanager:
+    image: {{ alertmanager_image }}
+    volumes: ["./alertmanager:/etc/alertmanager"]
+    ports: ["{{ monitoring_bind_address }}:{{ alertmanager_port }}:9093"]
+    restart: unless-stopped
+  blackbox:
+    image: {{ blackbox_image }}
+    volumes: ["./blackbox:/config"]
+    command: ["--config.file=/config/blackbox.yml"]
+    ports: ["{{ monitoring_bind_address }}:{{ blackbox_exporter_port }}:9115"]
+    restart: unless-stopped
+  loki:
+    image: {{ loki_image }}
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes: ["./loki:/etc/loki", "loki-data:/loki"]
+    ports: ["{{ monitoring_bind_address }}:{{ loki_port }}:3100"]
+    restart: unless-stopped
+  grafana:
+    image: {{ grafana_image }}
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "{{ vault_grafana_admin_password }}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes: ["grafana-data:/var/lib/grafana", "./grafana/provisioning:/etc/grafana/provisioning", "./grafana/dashboards:/var/lib/grafana/dashboards"]
+    ports: ["{{ monitoring_bind_address }}:{{ grafana_port }}:3000"]
+    restart: unless-stopped
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:

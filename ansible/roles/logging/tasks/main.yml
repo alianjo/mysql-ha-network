@@ -1,0 +1,67 @@
+---
+- name: Create Alloy user and directories
+  ansible.builtin.user:
+    name: alloy
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    groups: [adm, systemd-journal]
+    append: true
+
+- name: Install Alloy archive dependency
+  ansible.builtin.apt:
+    name: unzip
+    state: present
+
+- name: Create Alloy configuration directory
+  ansible.builtin.file:
+    path: /etc/alloy
+    state: directory
+    owner: alloy
+    group: alloy
+    mode: '0755'
+
+- name: Create Alloy data directory
+  ansible.builtin.file:
+    path: /var/lib/alloy
+    state: directory
+    owner: alloy
+    group: alloy
+    mode: '0755'
+
+- name: Install Alloy binary
+  ansible.builtin.unarchive:
+    src: "https://github.com/grafana/alloy/releases/download/v{{ alloy_version }}/alloy-linux-{{ alloy_arch }}.zip"
+    dest: /usr/local/bin
+    remote_src: true
+    creates: "/usr/local/bin/alloy-linux-{{ alloy_arch }}"
+
+- name: Create stable Alloy executable path
+  ansible.builtin.file:
+    src: "/usr/local/bin/alloy-linux-{{ alloy_arch }}"
+    dest: /usr/local/bin/alloy
+    state: link
+    force: true
+
+- name: Install Alloy configuration
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: /etc/alloy/config.alloy
+    owner: alloy
+    group: alloy
+    mode: '0640'
+  notify: restart alloy
+
+- name: Install Alloy service
+  ansible.builtin.template:
+    src: alloy.service.j2
+    dest: /etc/systemd/system/alloy.service
+    mode: '0644'
+  notify: restart alloy
+
+- name: Enable Alloy
+  ansible.builtin.systemd:
+    name: alloy
+    enabled: true
+    state: started
+    daemon_reload: true

@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh MySQL replication metrics
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=15s
+Unit=mysql-replication-metrics.service
+
+[Install]
+WantedBy=timers.target

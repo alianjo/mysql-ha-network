@@ -1,0 +1,61 @@
+---
+- name: Install MySQL
+  ansible.builtin.apt:
+    name: mysql-server
+    state: present
+    update_cache: true
+
+- name: Install PyMySQL Ansible dependency
+  ansible.builtin.apt:
+    name: python3-pymysql
+    state: present
+
+- name: Set MySQL replica bind address
+  ansible.builtin.lineinfile:
+    path: /etc/mysql/mysql.conf.d/mysqld.cnf
+    regexp: '^bind-address'
+    line: "bind-address = {{ mysql_bind_address }}"
+  notify: restart mysql
+
+- name: Deploy MySQL replica configuration
+  ansible.builtin.template:
+    src: mysqld.cnf.j2
+    dest: /etc/mysql/mysql.conf.d/99-sre-ha.cnf
+    mode: '0644'
+  notify: restart mysql
+
+- name: Ensure MySQL running
+  ansible.builtin.service:
+    name: mysql
+    state: started
+    enabled: true
+
+- name: Apply MySQL configuration before replication setup
+  ansible.builtin.meta: flush_handlers
+
+- name: Stop replica before changing source
+  community.mysql.mysql_replication:
+    mode: stopreplica
+    login_unix_socket: /run/mysqld/mysqld.sock
+  failed_when: false
+
+- name: Configure replica source
+  community.mysql.mysql_replication:
+    mode: changeprimary
+    login_unix_socket: /run/mysqld/mysqld.sock
+    primary_host: "{{ mysql_replication_master }}"
+    primary_user: "{{ mysql_replication_user }}"
+    primary_password: "{{ mysql_replication_password }}"
+    primary_auto_position: true
+  no_log: true
+
+- name: Bind replication connection to replica service address
+  community.mysql.mysql_query:
+    login_unix_socket: /run/mysqld/mysqld.sock
+    query: "CHANGE REPLICATION SOURCE TO SOURCE_BIND='{{ mysql_bind_address }}'"
+  no_log: true
+
+- name: Start replica
+  community.mysql.mysql_replication:
+    mode: startreplica
+    login_unix_socket: /run/mysqld/mysqld.sock

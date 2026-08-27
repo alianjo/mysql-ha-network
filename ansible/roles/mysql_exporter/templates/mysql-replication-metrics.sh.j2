@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+set -u
+out={{ node_exporter_textfile_dir | default('/var/lib/node_exporter/textfile_collector') }}/mysql_replication.prom
+tmp="${out}.tmp"
+state_dir={{ common_state_dir | default('/var/lib/mysql-ha-network') }}
+state_file="$state_dir/mysql-replication.state"
+mkdir -p "$(dirname "$out")"
+mkdir -p "$state_dir"
+rep=$(mysql --defaults-extra-file=/etc/mysql/sre-metrics.cnf -NBe 'SHOW REPLICA STATUS' 2>/dev/null || mysql --defaults-extra-file=/etc/mysql/sre-metrics.cnf -NBe 'SHOW SLAVE STATUS' 2>/dev/null || true)
+io=0; sql=0; lag=-1; configured=0
+if [ -n "$rep" ]; then
+  configured=1
+  io=$(printf '%s\n' "$rep" | awk -F '\t' '{print ($11=="Yes" ? 1 : 0)}')
+  sql=$(printf '%s\n' "$rep" | awk -F '\t' '{print ($12=="Yes" ? 1 : 0)}')
+  lag=$(printf '%s\n' "$rep" | awk -F '\t' '{print ($32=="NULL" || $32=="" ? -1 : $32)}')
+fi
+
+server_up=0
+status_output=""
+if status_output=$(mysql --defaults-extra-file=/etc/mysql/sre-metrics.cnf -NBe "SHOW GLOBAL STATUS WHERE Variable_name IN ('Uptime','Threads_connected','Threads_running','Questions','Slow_queries','Connections','Innodb_buffer_pool_reads')" 2>/dev/null); then
+  server_up=1
+fi
+
+status_value() {
+  local name="$1"
+  local value
+  value=$(printf '%s\n' "$status_output" | awk -F '\t' -v name="$name" '$1==name {print $2; exit}')
+  case "$value" in
+    ''|*[!0-9]*) printf '0\n' ;;
+    *) printf '%s\n' "$value" ;;
+  esac
+}
+
+uptime=$(status_value Uptime)
+threads_connected=$(status_value Threads_connected)
+threads_running=$(status_value Threads_running)
+questions=$(status_value Questions)
+slow_queries=$(status_value Slow_queries)
+connections=$(status_value Connections)
+innodb_buffer_pool_reads=$(status_value Innodb_buffer_pool_reads)
+read_only=$(mysql --defaults-extra-file=/etc/mysql/sre-metrics.cnf -NBe 'SELECT @@global.read_only' 2>/dev/null || printf '0')
+case "$read_only" in
+  1) ;;
+  *) read_only=0 ;;
+esac
+{
+  echo '# HELP mysql_server_up Whether the local MySQL server accepts metrics queries.'
+  echo '# TYPE mysql_server_up gauge'
+  echo "mysql_server_up $server_up"
+  echo '# HELP mysql_server_uptime_seconds Time since the local MySQL server started.'
+  echo '# TYPE mysql_server_uptime_seconds gauge'
+  echo "mysql_server_uptime_seconds $uptime"
+  echo '# HELP mysql_read_only Whether the local MySQL server is read-only.'
+  echo '# TYPE mysql_read_only gauge'
+  echo "mysql_read_only $read_only"
+  echo '# HELP mysql_threads_connected Number of currently open MySQL client connections.'
+  echo '# TYPE mysql_threads_connected gauge'
+  echo "mysql_threads_connected $threads_connected"
+  echo '# HELP mysql_threads_running Number of MySQL threads actively running.'
+  echo '# TYPE mysql_threads_running gauge'
+  echo "mysql_threads_running $threads_running"
+  echo '# HELP mysql_questions_total Number of MySQL statements executed.'
+  echo '# TYPE mysql_questions_total counter'
+  echo "mysql_questions_total $questions"
+  echo '# HELP mysql_slow_queries_total Number of MySQL statements that took longer than long_query_time.'
+  echo '# TYPE mysql_slow_queries_total counter'
+  echo "mysql_slow_queries_total $slow_queries"
+  echo '# HELP mysql_connections_total Number of connection attempts to MySQL.'
+  echo '# TYPE mysql_connections_total counter'
+  echo "mysql_connections_total $connections"
+  echo '# HELP mysql_innodb_buffer_pool_reads_total Number of InnoDB logical reads that required a disk read.'
+  echo '# TYPE mysql_innodb_buffer_pool_reads_total counter'
+  echo "mysql_innodb_buffer_pool_reads_total $innodb_buffer_pool_reads"
+  echo '# HELP mysql_replication_configured Whether replica status is configured.'
+  echo '# TYPE mysql_replication_configured gauge'
+  echo "mysql_replication_configured $configured"
+  echo '# HELP mysql_replication_io_running IO thread status.'
+  echo '# TYPE mysql_replication_io_running gauge'
+  echo "mysql_replication_io_running $io"
+  echo '# HELP mysql_replication_sql_running SQL thread status.'
+  echo '# TYPE mysql_replication_sql_running gauge'
+  echo "mysql_replication_sql_running $sql"
+  echo '# HELP mysql_replication_seconds_behind_master Replication lag in seconds.'
+  echo '# TYPE mysql_replication_seconds_behind_master gauge'
+  echo "mysql_replication_seconds_behind_master $lag"
+} > "$tmp" && mv "$tmp" "$out"
+
+replication_state=not_configured
+if [ "$configured" -eq 1 ]; then
+  replication_state=running
+  [ "$io" -eq 1 ] && [ "$sql" -eq 1 ] || replication_state=failed
+fi
+lag_state=unknown
+if [ "$lag" -ge 0 ]; then
+  lag_state=healthy
+  awk -v lag="$lag" -v threshold="{{ mysql_replication_lag_warning_seconds }}" 'BEGIN { exit !(lag > threshold) }' && lag_state=lagging
+fi
+
+previous_replication_state=""
+previous_lag_state=""
+if [ -s "$state_file" ]; then
+  IFS=' ' read -r previous_replication_state previous_lag_state < "$state_file" || true
+fi
+
+if [ -n "$previous_replication_state" ] && [ "$previous_replication_state" != "$replication_state" ]; then
+  if [ "$replication_state" = failed ]; then
+    logger -p daemon.warning -t sre-ha-event -- "event=REPLICATION_ISSUE host=$(hostname) io_running=$io sql_running=$sql"
+  elif [ "$previous_replication_state" = failed ] && [ "$replication_state" = running ]; then
+    logger -p daemon.notice -t sre-ha-event -- "event=REPLICATION_RECOVERY host=$(hostname)"
+  fi
+fi
+
+if [ -n "$previous_lag_state" ] && [ "$previous_lag_state" != "$lag_state" ]; then
+  if [ "$lag_state" = lagging ]; then
+    logger -p daemon.warning -t sre-ha-event -- "event=REPLICATION_LAG host=$(hostname) lag_seconds=$lag threshold_seconds={{ mysql_replication_lag_warning_seconds }}"
+  elif [ "$previous_lag_state" = lagging ] && [ "$lag_state" = healthy ]; then
+    logger -p daemon.notice -t sre-ha-event -- "event=REPLICATION_LAG_RECOVERY host=$(hostname) lag_seconds=$lag"
+  fi
+fi
+
+printf '%s %s\n' "$replication_state" "$lag_state" > "$state_file"

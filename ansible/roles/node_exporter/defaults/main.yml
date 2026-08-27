@@ -1,0 +1,7 @@
+---
+node_exporter_version: "1.8.2"
+node_exporter_arch: amd64
+node_exporter_listen_address: "0.0.0.0:9100"
+node_exporter_user: node-exp
+node_exporter_install_dir: /usr/local/bin
+node_exporter_textfile_dir: /var/lib/node_exporter/textfile_collector

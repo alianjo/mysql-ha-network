@@ -1,0 +1,114 @@
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mysql-ha-network-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ANSIBLE_FORCE_COLOR: "1"
+  PY_COLORS: "1"
+
+jobs:
+  lint:
+    name: Ansible lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      - name: Install lint dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ci.txt
+          ansible-galaxy collection install -r requirements.yml
+
+      - name: Run Ansible lint
+        run: ansible-lint --offline --profile=min ansible
+
+  deploy:
+    name: Deploy production
+    needs: lint
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: production
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      - name: Install deployment dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ci.txt
+          ansible-galaxy collection install -r requirements.yml
+
+      - name: Prepare SSH and Ansible Vault credentials
+        shell: bash
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          ANSIBLE_KNOWN_HOSTS: ${{ secrets.ANSIBLE_KNOWN_HOSTS }}
+          ANSIBLE_VAULT_FILE: ${{ secrets.ANSIBLE_VAULT_FILE }}
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_SSH_PRIVATE_KEY:?DEPLOY_SSH_PRIVATE_KEY is required}"
+          : "${ANSIBLE_KNOWN_HOSTS:?ANSIBLE_KNOWN_HOSTS is required}"
+          : "${ANSIBLE_VAULT_FILE:?ANSIBLE_VAULT_FILE is required}"
+          : "${ANSIBLE_VAULT_PASSWORD:?ANSIBLE_VAULT_PASSWORD is required}"
+
+          install -m 700 -d "$HOME/.ssh"
+          umask 077
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/mysql-ha-network-deploy-key"
+          printf '%s\n' "$ANSIBLE_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          printf '%s' "$ANSIBLE_VAULT_FILE" > inventory/group_vars/vault.yml
+          printf '%s' "$ANSIBLE_VAULT_PASSWORD" > "$RUNNER_TEMP/mysql-ha-network-vault-password"
+
+      - name: Deploy the complete stack
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "True"
+        run: |
+          ansible-playbook \
+            -i inventory/hosts.yml \
+            --private-key "$RUNNER_TEMP/mysql-ha-network-deploy-key" \
+            --vault-password-file "$RUNNER_TEMP/mysql-ha-network-vault-password" \
+            ansible/site.yml
+
+      - name: Remove temporary credentials
+        if: always()
+        run: |
+          rm -f -- \
+            "$RUNNER_TEMP/mysql-ha-network-deploy-key" \
+            "$RUNNER_TEMP/mysql-ha-network-vault-password" \
+            inventory/group_vars/vault.yml

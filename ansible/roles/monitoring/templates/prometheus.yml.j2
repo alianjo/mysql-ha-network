@@ -1,0 +1,28 @@
+global:
+  scrape_interval: {{ monitoring_scrape_interval }}
+  evaluation_interval: {{ monitoring_evaluation_interval }}
+  external_labels: {cluster: sre-ha}
+rule_files: [/etc/prometheus/alerts.yml]
+alerting:
+  alertmanagers: [{static_configs: [{targets: ["alertmanager:9093"]}]}]
+scrape_configs:
+  - job_name: prometheus
+    static_configs: [{targets: ["prometheus:9090"]}]
+  - job_name: node
+    static_configs:
+{% for host in (groups['routing'] + groups['monitoring']) | unique | list %}
+      - targets: ["{{ hostvars[host].ansible_host }}:{{ node_exporter_port }}"]
+        labels: {host: "{{ host }}", site: "{{ hostvars[host].site }}", role: "{{ hostvars[host].role }}"}
+{% endfor %}
+  - job_name: blackbox-network
+    metrics_path: /probe
+    params: {module: [icmp]}
+    static_configs:
+{% for host in groups['mysql'] %}
+      - targets: ["{{ hostvars[host].ansible_host }}"]
+        labels: {host: "{{ host }}", site: "{{ hostvars[host].site }}"}
+{% endfor %}
+    relabel_configs:
+      - {source_labels: [__address__], target_label: __param_target}
+      - {source_labels: [__param_target], target_label: instance}
+      - {target_label: __address__, replacement: "blackbox:9115"}

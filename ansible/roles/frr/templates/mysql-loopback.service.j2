@@ -1,0 +1,16 @@
+# Managed by Ansible.
+[Unit]
+Description=HA stable MySQL service loopback
+Documentation=file://{{ frr_config_path }}
+After=network-online.target
+Wants=network-online.target
+Before=frr.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/env ip address replace {{ mysql_loopbacks[inventory_hostname] }} dev lo
+ExecStop=-/usr/bin/env ip address del {{ mysql_loopbacks[inventory_hostname] }} dev lo
+
+[Install]
+WantedBy=multi-user.target

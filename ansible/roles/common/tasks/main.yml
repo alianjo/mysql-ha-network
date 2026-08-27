@@ -1,0 +1,121 @@
+---
+- name: Validate supported operating system
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == "Ubuntu"
+      - ansible_facts.distribution_version in common_supported_ubuntu_releases
+    fail_msg: >-
+      This project supports Ubuntu {{ common_supported_ubuntu_releases | join(', ') }};
+      detected {{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}.
+
+- name: Set system hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  when: common_manage_hostname | bool
+
+- name: Set system timezone
+  community.general.timezone:
+    name: "{{ sre_timezone }}"
+
+- name: Refresh apt metadata
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install common packages
+  ansible.builtin.apt:
+    name: "{{ sre_common_packages }}"
+    state: present
+
+- name: Create project directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ common_config_dir }}", mode: "0755"}
+    - {path: "{{ common_state_dir }}", mode: "0755"}
+    - {path: "{{ common_log_dir }}", mode: "0750"}
+    - {path: "{{ node_exporter_textfile_dir }}", mode: "0755"}
+
+- name: Add inventory hosts with configured private addresses to /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^\\S+\\s+{{ item }}(?:\\s|$)"
+    line: "{{ hostvars[item].private_ip }} {{ item }}"
+    create: false
+    state: present
+  loop: "{{ groups['all'] | default([]) }}"
+  when:
+    - common_manage_hosts_file | bool
+    - hostvars[item].private_ip is defined
+    - not (hostvars[item].private_ip is match('^REPLACE_ME_'))
+
+- name: Persist common kernel networking settings
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: true
+    reload: true
+  loop: "{{ common_sysctl | dict2items }}"
+
+- name: Persist multi-homed routing kernel settings
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: true
+    reload: true
+  loop: "{{ routing_sysctl | dict2items }}"
+  when: inventory_hostname in (groups['routing'] | default([]))
+
+- name: Enable IPv4 forwarding on transit routers
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: true
+    reload: true
+  loop: "{{ transit_router_sysctl | dict2items }}"
+  when: inventory_hostname in (groups['transit_routers'] | default([]))
+
+- name: Create nftables include directory
+  ansible.builtin.file:
+    path: "{{ common_nftables_include_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: common_manage_nftables_foundation | bool
+
+- name: Install non-restrictive nftables foundation table
+  ansible.builtin.template:
+    src: 00-sre-base.nft.j2
+    dest: "{{ common_nftables_include_dir }}/00-sre-base.nft"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "nft -c -f %s"
+  notify: Reload nftables
+  when: common_manage_nftables_foundation | bool
+
+- name: Install nftables top-level configuration
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "nft -c -f %s"
+  notify: Reload nftables
+  when: common_manage_nftables_foundation | bool
+
+- name: Ensure nftables is enabled and running
+  ansible.builtin.service:
+    name: nftables
+    enabled: true
+    state: started
+  when: common_manage_nftables_foundation | bool

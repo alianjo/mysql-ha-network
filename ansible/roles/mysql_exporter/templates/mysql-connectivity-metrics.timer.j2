@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh MySQL peer connectivity metrics
+
+[Timer]
+OnBootSec=50s
+OnUnitActiveSec=15s
+Unit=mysql-connectivity-metrics.service
+
+[Install]
+WantedBy=timers.target

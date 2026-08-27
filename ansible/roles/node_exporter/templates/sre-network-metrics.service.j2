@@ -1,0 +1,9 @@
+[Unit]
+Description=SRE network and routing metrics
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sre-network-metrics
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,29 @@
+---
+- name: Install metrics and log agents on all infrastructure hosts
+  hosts: routing:mysql:monitoring
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../inventory/group_vars/vault.yml
+  roles:
+    - node_exporter
+    - logging
+
+- name: Install MySQL replication metrics agents
+  hosts: mysql
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../inventory/group_vars/vault.yml
+  roles:
+    - mysql_exporter
+
+- name: Deploy the central observability stack
+  hosts: monitoring
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../inventory/group_vars/vault.yml
+  roles:
+    - monitoring
+    - logging

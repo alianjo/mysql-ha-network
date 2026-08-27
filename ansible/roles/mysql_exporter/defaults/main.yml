@@ -1,0 +1,10 @@
+---
+mysql_metrics_user: sre_metrics
+mysql_metrics_password: "{{ vault_mysql_metrics_password }}"
+mysql_metrics_host: "127.0.0.1"
+mysql_metrics_port: 3306
+mysql_connectivity_probe_count: 3
+mysql_connectivity_probe_interval_seconds: 0.2
+mysql_connectivity_probe_timeout_seconds: 1
+mysql_connectivity_tcp_timeout_seconds: 2
+mysql_replication_lag_warning_seconds: 30

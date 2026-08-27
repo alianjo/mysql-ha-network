@@ -1,0 +1,3 @@
+---
+mysql_bind_address: "{{ mysql_replica_bind_address }}"
+mysql_server_id: "{{ mysql_replica_server_id }}"

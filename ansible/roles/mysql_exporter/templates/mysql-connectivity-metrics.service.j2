@@ -1,0 +1,8 @@
+[Unit]
+Description=Measure MySQL peer connectivity over the HA network
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mysql-connectivity-metrics

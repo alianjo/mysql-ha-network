@@ -29,11 +29,29 @@
     group: alloy
     mode: '0755'
 
+- name: Create Alloy controller download cache
+  ansible.builtin.file:
+    path: "{{ alloy_controller_cache_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Download Alloy archive on the controller
+  ansible.builtin.get_url:
+    url: "{{ alloy_download_url }}"
+    dest: "{{ alloy_controller_archive_path }}"
+    checksum: "{{ alloy_checksum }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
 - name: Install Alloy binary
   ansible.builtin.unarchive:
-    src: "https://github.com/grafana/alloy/releases/download/v{{ alloy_version }}/alloy-linux-{{ alloy_arch }}.zip"
+    src: "{{ alloy_controller_archive_path }}"
     dest: /usr/local/bin
-    remote_src: true
     creates: "/usr/local/bin/alloy-linux-{{ alloy_arch }}"
 
 - name: Create stable Alloy executable path

@@ -25,6 +25,7 @@
   delegate_to: localhost
   become: false
   run_once: true
+  when: node_exporter_download_on_controller | bool
 
 - name: Download node exporter archive on the controller
   ansible.builtin.get_url:
@@ -35,6 +36,16 @@
   delegate_to: localhost
   become: false
   run_once: true
+  when: node_exporter_download_on_controller | bool
+
+- name: Verify node exporter archive is available on the controller
+  ansible.builtin.stat:
+    path: "{{ node_exporter_controller_archive_path }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: node_exporter_archive
+  failed_when: not node_exporter_archive.stat.exists
 
 - name: Install node exporter binary
   ansible.builtin.unarchive:

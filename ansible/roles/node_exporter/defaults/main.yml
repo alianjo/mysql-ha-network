@@ -10,3 +10,4 @@ node_exporter_download_url: "https://github.com/prometheus/node_exporter/release
 node_exporter_controller_cache_dir: "{{ lookup('ansible.builtin.env', 'RUNNER_TEMP') | default('/tmp', true) }}/mysql-ha-network-cache"
 node_exporter_controller_archive_path: "{{ node_exporter_controller_cache_dir }}/{{ node_exporter_archive_name }}"
 node_exporter_checksum: "sha256:6809dd0b3ec45fd6e992c19071d6b5253aed3ead7bf0686885a51d85c6643c66"
+node_exporter_download_on_controller: true

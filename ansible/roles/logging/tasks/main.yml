@@ -37,6 +37,7 @@
   delegate_to: localhost
   become: false
   run_once: true
+  when: alloy_download_on_controller | bool
 
 - name: Download Alloy archive on the controller
   ansible.builtin.get_url:
@@ -47,6 +48,16 @@
   delegate_to: localhost
   become: false
   run_once: true
+  when: alloy_download_on_controller | bool
+
+- name: Verify Alloy archive is available on the controller
+  ansible.builtin.stat:
+    path: "{{ alloy_controller_archive_path }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: alloy_archive
+  failed_when: not alloy_archive.stat.exists
 
 - name: Install Alloy binary
   ansible.builtin.unarchive:

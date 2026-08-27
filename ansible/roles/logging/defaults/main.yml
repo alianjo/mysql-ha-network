@@ -6,5 +6,6 @@ alloy_download_url: "https://github.com/grafana/alloy/releases/download/v{{ allo
 alloy_controller_cache_dir: "{{ lookup('ansible.builtin.env', 'RUNNER_TEMP') | default('/tmp', true) }}/mysql-ha-network-cache"
 alloy_controller_archive_path: "{{ alloy_controller_cache_dir }}/{{ alloy_archive_name }}"
 alloy_checksum: "sha256:5369ff0b66a6bb8300ec3f1ca2666272a073224d935c8881b53b8f5b9a9517a6"
+alloy_download_on_controller: true
 monitoring_stack_host: monitor-01
 loki_url: "http://{{ hostvars[monitoring_stack_host].ansible_host }}:{{ loki_port | default(3100) }}/loki/api/v1/push"

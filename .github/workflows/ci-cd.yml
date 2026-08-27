@@ -95,6 +95,25 @@ jobs:
           printf '%s' "$ANSIBLE_VAULT_FILE" > inventory/group_vars/vault.yml
           printf '%s' "$ANSIBLE_VAULT_PASSWORD" > "$RUNNER_TEMP/mysql-ha-network-vault-password"
 
+      - name: Download deployment artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/mysql-ha-network-artifacts"
+          install -m 700 -d "$artifact_dir"
+
+          curl --fail --silent --show-error --location --retry 5 \
+            --connect-timeout 15 --max-time 180 \
+            "https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-amd64.tar.gz" \
+            --output "$artifact_dir/node_exporter-1.8.2.linux-amd64.tar.gz"
+          echo "6809dd0b3ec45fd6e992c19071d6b5253aed3ead7bf0686885a51d85c6643c66  $artifact_dir/node_exporter-1.8.2.linux-amd64.tar.gz" | sha256sum --check
+
+          curl --fail --silent --show-error --location --retry 5 \
+            --connect-timeout 15 --max-time 180 \
+            "https://github.com/grafana/alloy/releases/download/v1.3.1/alloy-linux-amd64.zip" \
+            --output "$artifact_dir/alloy-linux-amd64.zip"
+          echo "5369ff0b66a6bb8300ec3f1ca2666272a073224d935c8881b53b8f5b9a9517a6  $artifact_dir/alloy-linux-amd64.zip" | sha256sum --check
+
       - name: Deploy the complete stack
         env:
           ANSIBLE_HOST_KEY_CHECKING: "True"
@@ -103,6 +122,10 @@ jobs:
             -i inventory/hosts.yml \
             --private-key "$RUNNER_TEMP/mysql-ha-network-deploy-key" \
             --vault-password-file "$RUNNER_TEMP/mysql-ha-network-vault-password" \
+            --extra-vars "node_exporter_download_on_controller=false" \
+            --extra-vars "alloy_download_on_controller=false" \
+            --extra-vars "node_exporter_controller_archive_path=$RUNNER_TEMP/mysql-ha-network-artifacts/node_exporter-1.8.2.linux-amd64.tar.gz" \
+            --extra-vars "alloy_controller_archive_path=$RUNNER_TEMP/mysql-ha-network-artifacts/alloy-linux-amd64.zip" \
             ansible/site.yml
 
       - name: Remove temporary credentials
@@ -111,4 +134,6 @@ jobs:
           rm -f -- \
             "$RUNNER_TEMP/mysql-ha-network-deploy-key" \
             "$RUNNER_TEMP/mysql-ha-network-vault-password" \
+            "$RUNNER_TEMP/mysql-ha-network-artifacts/node_exporter-1.8.2.linux-amd64.tar.gz" \
+            "$RUNNER_TEMP/mysql-ha-network-artifacts/alloy-linux-amd64.zip" \
             inventory/group_vars/vault.yml

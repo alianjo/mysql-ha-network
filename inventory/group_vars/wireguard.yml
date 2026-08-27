@@ -10,7 +10,8 @@ wireguard_ospf_multicast_allowed_ips:
   - 224.0.0.6/32
 
 # Each entry is one independent point-to-point WireGuard link.
-# AllowedIPs contain the peer transit /32, one peer-side service /32, and OSPFv2 multicast /32s.
+# AllowedIPs contain the peer transit /32, any routed endpoint transit /32, one
+# peer-side service /32, and OSPFv2 multicast /32s.
 # The service selector is required by WireGuard cryptokey routing/source validation.
 # Table=off prevents route injection; end-to-end service routes are selected by OSPF.
 wireguard_links:
@@ -24,6 +25,9 @@ wireguard_links:
     peer_endpoint_address: "{{ hostvars['tabriz-wg01'].public_ip }}"
     peer_endpoint_port: 51811
     peer_allowed_ip: 10.10.1.2/32
+    # Return traffic from the remote MySQL endpoint traverses this router.
+    peer_routed_allowed_ips:
+      - 10.10.1.6/32
     peer_service_allowed_ip: 10.255.2.1/32
     ospf_cost: 10
 
@@ -63,6 +67,9 @@ wireguard_links:
     peer_endpoint_address: "{{ hostvars['tabriz-wg01'].public_ip }}"
     peer_endpoint_port: 51812
     peer_allowed_ip: 10.10.1.5/32
+    # Permit traffic sourced from the remote MySQL endpoint via this router.
+    peer_routed_allowed_ips:
+      - 10.10.1.1/32
     peer_service_allowed_ip: 10.255.1.1/32
     ospf_cost: 10
 
@@ -76,6 +83,9 @@ wireguard_links:
     peer_endpoint_address: "{{ hostvars['shiraz-wg02'].public_ip }}"
     peer_endpoint_port: 51821
     peer_allowed_ip: 10.10.2.2/32
+    # Return traffic from the remote MySQL endpoint traverses this router.
+    peer_routed_allowed_ips:
+      - 10.10.2.6/32
     peer_service_allowed_ip: 10.255.2.1/32
     ospf_cost: 100
 
@@ -115,5 +125,8 @@ wireguard_links:
     peer_endpoint_address: "{{ hostvars['shiraz-wg02'].public_ip }}"
     peer_endpoint_port: 51822
     peer_allowed_ip: 10.10.2.5/32
+    # Permit traffic sourced from the remote MySQL endpoint via this router.
+    peer_routed_allowed_ips:
+      - 10.10.2.1/32
     peer_service_allowed_ip: 10.255.1.1/32
     ospf_cost: 100

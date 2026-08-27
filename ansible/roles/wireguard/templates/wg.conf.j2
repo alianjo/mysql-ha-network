@@ -9,5 +9,5 @@ PostUp = /usr/bin/wg set %i private-key {{ wireguard_key_directory }}/{{ item.na
 [Peer]
 PublicKey = {{ hostvars[item.peer_host].wireguard_public_keys[item.name] }}
 Endpoint = {{ item.peer_endpoint_address }}:{{ item.peer_endpoint_port }}
-AllowedIPs = {{ ([item.peer_allowed_ip, item.peer_service_allowed_ip] + wireguard_ospf_multicast_allowed_ips) | join(', ') }}
+AllowedIPs = {{ ([item.peer_allowed_ip] + (item.peer_routed_allowed_ips | default([])) + [item.peer_service_allowed_ip] + wireguard_ospf_multicast_allowed_ips) | join(', ') }}
 PersistentKeepalive = {{ wireguard_persistent_keepalive }}

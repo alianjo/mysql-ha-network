@@ -40,13 +40,18 @@
   failed_when: false
 
 - name: Configure replica source
-  community.mysql.mysql_replication:
-    mode: changeprimary
+  community.mysql.mysql_query:
     login_unix_socket: /run/mysqld/mysqld.sock
-    primary_host: "{{ mysql_replication_master }}"
-    primary_user: "{{ mysql_replication_user }}"
-    primary_password: "{{ mysql_replication_password }}"
-    primary_auto_position: true
+    query: >-
+      CHANGE REPLICATION SOURCE TO
+      SOURCE_HOST=%(source_host)s,
+      SOURCE_USER=%(source_user)s,
+      SOURCE_PASSWORD=%(source_password)s,
+      SOURCE_AUTO_POSITION=1
+    named_args:
+      source_host: "{{ mysql_replication_master }}"
+      source_user: "{{ mysql_replication_user }}"
+      source_password: "{{ mysql_replication_password }}"
   no_log: true
 
 - name: Bind replication connection to replica service address

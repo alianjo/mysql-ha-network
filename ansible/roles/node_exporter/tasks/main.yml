@@ -17,11 +17,29 @@
     - "{{ node_exporter_textfile_dir }}"
     - /etc/node_exporter
 
+- name: Create node exporter controller download cache
+  ansible.builtin.file:
+    path: "{{ node_exporter_controller_cache_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Download node exporter archive on the controller
+  ansible.builtin.get_url:
+    url: "{{ node_exporter_download_url }}"
+    dest: "{{ node_exporter_controller_archive_path }}"
+    checksum: "{{ node_exporter_checksum }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
 - name: Install node exporter binary
   ansible.builtin.unarchive:
-    src: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-{{ node_exporter_arch }}.tar.gz"
+    src: "{{ node_exporter_controller_archive_path }}"
     dest: /tmp
-    remote_src: true
     creates: "/tmp/node_exporter-{{ node_exporter_version }}.linux-{{ node_exporter_arch }}/node_exporter"
 
 - name: Copy node exporter binary

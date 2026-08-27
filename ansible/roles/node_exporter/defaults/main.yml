@@ -5,3 +5,8 @@ node_exporter_listen_address: "0.0.0.0:9100"
 node_exporter_user: node-exp
 node_exporter_install_dir: /usr/local/bin
 node_exporter_textfile_dir: /var/lib/node_exporter/textfile_collector
+node_exporter_archive_name: "node_exporter-{{ node_exporter_version }}.linux-{{ node_exporter_arch }}.tar.gz"
+node_exporter_download_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/{{ node_exporter_archive_name }}"
+node_exporter_controller_cache_dir: "{{ playbook_dir }}/.ansible/cache"
+node_exporter_controller_archive_path: "{{ node_exporter_controller_cache_dir }}/{{ node_exporter_archive_name }}"
+node_exporter_checksum: "sha256:6809dd0b3ec45fd6e992c19071d6b5253aed3ead7bf0686885a51d85c6643c66"

@@ -6,6 +6,7 @@ common_supported_ubuntu_releases:
 common_manage_hostname: true
 common_manage_hosts_file: "{{ sre_manage_etc_hosts | default(true) }}"
 common_manage_nftables_foundation: true
+sre_ssh_port: 2222
 common_nftables_include_dir: /etc/nftables.d
 common_state_dir: /var/lib/mysql-ha-network
 common_log_dir: /var/log/mysql-ha-network

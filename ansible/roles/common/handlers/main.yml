@@ -3,3 +3,13 @@
   ansible.builtin.service:
     name: nftables
     state: reloaded
+
+- name: Reload SSH daemon
+  ansible.builtin.systemd:
+    name: ssh.service
+    state: reloaded
+
+- name: Restart SSH socket
+  ansible.builtin.systemd:
+    name: ssh.socket
+    state: restarted

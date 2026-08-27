@@ -27,6 +27,40 @@
     name: "{{ sre_common_packages }}"
     state: present
 
+- name: Configure SSH daemon on the dedicated project port
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/99-mysql-ha-network-port.conf
+    content: |
+      # Managed by mysql-ha-network.
+      Port {{ sre_ssh_port }}
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "/usr/sbin/sshd -t -f %s"
+  notify:
+    - Reload SSH daemon
+    - Restart SSH socket
+
+- name: Create SSH socket drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/ssh.socket.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure SSH socket activation on the dedicated project port
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ssh.socket.d/99-mysql-ha-network-port.conf
+    content: |
+      [Socket]
+      ListenStream=
+      ListenStream={{ sre_ssh_port }}
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart SSH socket
+
 - name: Create project directories
   ansible.builtin.file:
     path: "{{ item.path }}"

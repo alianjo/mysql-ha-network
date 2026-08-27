@@ -128,6 +128,82 @@ jobs:
             --extra-vars "alloy_controller_archive_path=$RUNNER_TEMP/mysql-ha-network-artifacts/alloy-linux-amd64.zip" \
             ansible/site.yml
 
+      - name: Run simple integration checks
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh_options=(
+            -i "$RUNNER_TEMP/mysql-ha-network-deploy-key"
+            -p 2222
+            -o BatchMode=yes
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts"
+          )
+
+          ssh_script() {
+            local host="$1"
+            ssh "${ssh_options[@]}" "root@${host}" bash -s
+          }
+
+          echo "1/3: verify SSH and core services on every server"
+          for host in \
+            45.159.113.191 \
+            45.159.113.190 \
+            185.213.165.112 \
+            85.208.254.183 \
+            85.208.254.233; do
+            ssh_script "$host" <<'REMOTE'
+          set -euo pipefail
+          systemctl is-active --quiet ssh
+          systemctl is-active --quiet nftables
+          systemctl is-active --quiet node-exporter
+          systemctl is-active --quiet alloy
+          REMOTE
+            echo "  $host: OK"
+          done
+
+          echo "2/3: verify MySQL replication"
+          ssh_script 45.159.113.191 <<'REMOTE'
+          set -euo pipefail
+          systemctl is-active --quiet mysql
+          test "$(mysql --protocol=socket --batch --skip-column-names -e "SELECT @@read_only")" = "0"
+          REMOTE
+
+          ssh_script 85.208.254.183 <<'REMOTE'
+          set -euo pipefail
+          systemctl is-active --quiet mysql
+          replica_status="$(mysql --protocol=socket -e "SHOW REPLICA STATUS\\G")"
+          grep -q "Replica_IO_Running: Yes" <<< "$replica_status"
+          grep -q "Replica_SQL_Running: Yes" <<< "$replica_status"
+          grep -q "Seconds_Behind_Source: 0" <<< "$replica_status"
+          REMOTE
+          echo "  replication: OK"
+
+          echo "3/3: verify monitoring endpoints and Prometheus targets"
+          ssh_script 85.208.254.233 <<'REMOTE'
+          set -euo pipefail
+          compose_file=/opt/sre-observability/docker-compose.yml
+          for service in prometheus alertmanager blackbox grafana loki; do
+            docker compose --compatibility -f "$compose_file" ps --format "{{.Service}} {{.State}}" |
+              grep -q "^${service} running$"
+          done
+
+          for endpoint in \
+            http://127.0.0.1:9090/-/ready \
+            http://127.0.0.1:9093/-/ready \
+            http://127.0.0.1:9115/-/healthy \
+            http://127.0.0.1:3000/api/health \
+            http://127.0.0.1:3100/ready; do
+            test "$(curl --silent --output /dev/null --write-out "%{http_code}" "$endpoint")" = "200"
+          done
+
+          targets="$(curl --fail --silent http://127.0.0.1:9090/api/v1/targets)"
+          down_targets="$(jq '[.data.activeTargets[] | select(.health != "up")] | length' <<< "$targets")"
+          test "$down_targets" = "0"
+          REMOTE
+          echo "  monitoring: OK"
+
       - name: Remove temporary credentials
         if: always()
         run: |

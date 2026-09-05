@@ -30,6 +30,9 @@
     state: started
     enabled: true
 
+- name: Apply MySQL configuration before account setup
+  ansible.builtin.meta: flush_handlers
+
 - name: Create replication user
   community.mysql.mysql_user:
     name: "{{ mysql_replication_user }}"

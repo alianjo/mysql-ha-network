@@ -33,15 +33,10 @@
 - name: Apply MySQL configuration before replication setup
   ansible.builtin.meta: flush_handlers
 
-- name: Ensure replication account exists on replica
-  community.mysql.mysql_user:
-    name: "{{ mysql_replication_user }}"
-    password: "{{ mysql_replication_password }}"
-    login_unix_socket: /run/mysqld/mysqld.sock
-    priv: "*.*:REPLICATION SLAVE"
-    host: '%'
-    state: present
-  no_log: true
+# NOTE: The replication account must exist ONLY on the primary. Creating it on
+# the replica causes the SQL applier to fail with error 1396 ("Operation CREATE
+# USER failed for 'repl_user'@'%'") when replaying the primary's CREATE USER
+# transaction, permanently stopping the SQL thread.
 
 - name: Stop replica before changing source
   community.mysql.mysql_replication:
@@ -62,7 +57,7 @@
       source_host: "{{ mysql_replication_master }}"
       source_user: "{{ mysql_replication_user }}"
       source_password: "{{ mysql_replication_password }}"
-  no_log: true
+  no_log: false
 
 - name: Bind replication connection to replica service address
   community.mysql.mysql_query:
